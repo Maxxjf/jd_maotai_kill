@@ -12,7 +12,7 @@ from .config import global_config
 
 
 class Timer(object):
-    def __init__(self, sleep_interval=0.5):
+    def __init__(self, sleep_interval=0.1):
         # '2018-09-28 22:45:50.000'
         self.buy_time = datetime.strptime(global_config.getRaw('config', 'buy_time'), "%Y-%m-%d %H:%M:%S.%f")
         self.buy_time_ms = int(time.mktime(self.buy_time.timetuple()) * 1000.0 + self.buy_time.microsecond / 1000)
@@ -53,8 +53,11 @@ class Timer(object):
                 logger.info('时间到达，开始执行……')
                 break
             else:
+                logger.info('时间未到达')
                 time.sleep(self.sleep_interval)
 
     def buytime_get(self):
         """获取开始抢购的时间"""
         return self.buy_time
+
+        

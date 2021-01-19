@@ -1,6 +1,6 @@
 import sys
 from jd_seckill.timer import Timer
-
+from jd_seckill.jd_spider_requests import JdSeckill
 
 if __name__ == '__main__':
     a = """
@@ -28,8 +28,7 @@ if __name__ == '__main__':
     //                          佛祖镇楼
    
     """
-    print(a)
-
-    timer = Timer()
-    timer.start()
+    jd_seckill = JdSeckill()
+    jd_seckill.request_seckill_checkout_page()
+    jd_seckill.submit_seckill_order()
 

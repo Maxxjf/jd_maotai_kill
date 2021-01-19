@@ -105,6 +105,7 @@ class SpiderSession:
         with open(cookies_file, 'wb') as f:
             pickle.dump(self.get_cookies(), f)
 
+        
 
 class QrLogin:
     """
@@ -293,68 +294,6 @@ class JdTdudfp:
     def get(self, key):
         return self.jd_tdudfp.get(key) if self.jd_tdudfp else None
 
-    async def _get(self):
-        jd_tdudfp = None
-        try:
-            from pyppeteer import launch
-            url = "https://www.jd.com/"
-            browser = await launch(userDataDir=".user_data", autoClose=True,
-                                   args=['--start-maximized', '--no-sandbox', '--disable-setuid-sandbox'])
-            page = await browser.newPage()
-            # 有些页面打开慢，这里设置时间长一点，360秒
-            page.setDefaultNavigationTimeout(360 * 1000)
-            await page.setViewport({"width": 1920, "height": 1080})
-            await page.setUserAgent(self.user_agent)
-            for key, value in self.cookies.items():
-                await page.setCookie({"domain": ".jd.com", "name": key, "value": value})
-            await page.goto(url)
-            await page.waitFor(".nickname")
-            logger.info("page_title:【%s】, page_url【%s】" % (await page.title(), page.url))
-
-            nick_name = await page.querySelectorEval(".nickname", "(element) => element.textContent")
-            logger.info("用户名为："+nickName)
-            if not nick_name:
-                # 如果未获取到用户昵称，说明可能登陆失败，放弃获取 _JdTdudfp
-                return jd_tdudfp
-
-            await page.waitFor(".cate_menu_lk")
-            # .cate_menu_lk是一个a标签，理论上可以直接触发click事件
-            # 点击事件会打开一个新的tab页，但是browser.pages()无法获取新打开的tab页，导致无法引用新打开的page对象
-            # 所以获取href，使用goto跳转的方式
-            # 下面类似goto写法都是这个原因
-            a_href = await page.querySelectorAllEval(".cate_menu_lk", "(elements) => elements[0].href")
-            await page.goto(a_href)
-            await page.waitFor(".goods_item_link")
-            logger.info("page_title：【%s】, page_url：【%s】" % (await page.title(), page.url))
-            a_href = await page.querySelectorAllEval(".goods_item_link", "(elements) => elements[{}].href".format(str(random.randint(1,20))))
-            await page.goto(a_href)
-            await page.waitFor("#InitCartUrl")
-            logger.info("page_title：【%s】, page_url：【%s】" % (await page.title(), page.url))
-            a_href = await page.querySelectorAllEval("#InitCartUrl", "(elements) => elements[0].href")
-            await page.goto(a_href)
-            await page.waitFor(".btn-addtocart")
-            logger.info("page_title：【%s】, page_url：【%s】" % (await page.title(), page.url))
-            a_href = await page.querySelectorAllEval(".btn-addtocart", "(elements) => elements[0].href")
-            await page.goto(a_href)
-            await page.waitFor(".common-submit-btn")
-            logger.info("page_title：【%s】, page_url：【%s】" % (await page.title(), page.url))
-            
-            await page.click(".common-submit-btn")
-            await page.waitFor("#sumPayPriceId")
-            logger.info("page_title：【%s】, page_url：【%s】" % (await page.title(), page.url))
-
-            for _ in range(30):
-                jd_tdudfp = await page.evaluate("() => {try{return _JdTdudfp}catch(e){}}")
-                if jd_tdudfp and len(jd_tdudfp) > 0:
-                    logger.info("jd_tdudfp：【%s】" % jd_tdudfp)
-                    break
-                else:
-                    await asyncio.sleep(1)
-
-            await page.close()
-        except Exception as e:
-            logger.info("自动获取JdTdudfp发生异常，将从配置文件读取！")
-        return jd_tdudfp
 
 
 class JdSeckill(object):
@@ -396,7 +335,7 @@ class JdSeckill(object):
         else:
             raise SKException("二维码登录失败！")
 
-    def check_login_and_jdtdufp(func):
+    def check_login(func):
         """
         用户登陆态校验装饰器。若用户未登陆，则调用扫码登陆
         """
@@ -405,33 +344,36 @@ class JdSeckill(object):
             if not self.qrlogin.is_login:
                 logger.info("{0} 需登陆后调用，开始扫码登陆".format(func.__name__))
                 self.login_by_qrcode()
-            if not self.jd_tdufp.is_init:
-                self.jd_tdufp.init_jd_tdudfp()
             return func(self, *args, **kwargs)
         return new_func
 
-    @check_login_and_jdtdufp
+    @check_login
     def reserve(self):
         """
         预约
         """
         self._reserve()
 
-    @check_login_and_jdtdufp
+    @check_login
     def seckill(self):
         """
         抢购
         """
+        logger.info("seckill")
         self._seckill()
+        # self.request_seckill_checkout_page()
+        # self.submit_seckill_order()
 
-    @check_login_and_jdtdufp
+    @check_login
     def seckill_by_proc_pool(self, work_count=5):
         """
         多进程进行抢购
         work_count：进程数量
         """
+        logger.info("seckill_by_proc_pool")
         with ProcessPoolExecutor(work_count) as pool:
             for i in range(work_count):
+                logger.info(str(i))
                 pool.submit(self.seckill)
 
     def _reserve(self):
@@ -673,8 +615,8 @@ class JdSeckill(object):
             'areaCode': '',
             'overseas': 0,
             'phone': '',
-            'eid': self.jd_tdufp.get("eid") if self.jd_tdufp.get("eid") else global_config.getRaw('config', 'eid'),
-            'fp': self.jd_tdufp.get("fp") if self.jd_tdufp.get("fp") else global_config.getRaw('config', 'fp'),
+            'eid': global_config.getRaw('config', 'eid'),
+            'fp': global_config.getRaw('config', 'fp'),
             'token': token,
             'pru': ''
         }
